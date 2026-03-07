@@ -5,6 +5,8 @@ services:
     image: mcr.microsoft.com/playwright:v1.50.0-noble
     volumes:
       - .:/Catan-MT
+      - ~/.ssh:/root/.ssh
+      - ~/.gitconfig:/root/.gitconfig
     working_dir: /Catan-MT
     stdin_open: true
     tty: true
