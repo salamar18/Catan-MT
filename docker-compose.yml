@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  playwright:
+    image: mcr.microsoft.com/playwright:v1.50.0-noble
+    volumes:
+      - .:/Catan-MT
+    working_dir: /Catan-MT
+    stdin_open: true
+    tty: true
+    command: >
+      bash -c "npm install playwright && npx playwright install && exec bash"
