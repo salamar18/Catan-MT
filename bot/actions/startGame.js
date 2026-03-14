@@ -1,3 +1,5 @@
+const { play } = require('../engine/decideMove');
+
 /**
  * Creates a room against a bot with Ranked 1v1 rules 
  *
@@ -48,5 +50,7 @@ async function startGame(page) {
     const startGameButton = page.getByText('I\'m ReadyStart GameStart');
     await startGameButton.click();
     console.log('Clicked Start Game');
+
+    await play(page);
 }
-  module.exports = startGame;
+module.exports = startGame;
