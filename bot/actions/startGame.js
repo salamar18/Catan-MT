@@ -43,5 +43,13 @@ async function startGame(page) {
     for (let i = 0; i < 2; i++) {
       await discardSlider.press('ArrowRight');
     }
+<<<<<<< HEAD
+=======
+
+    // Start the game
+    const startGameButton = page.getByText('I\'m ReadyStart GameStart');
+    await startGameButton.click();
+    console.log('Clicked Start Game');
+>>>>>>> 37c970f0aaaf22c549eaef54493df1c26fc9ab86
 }
   module.exports = startGame;
