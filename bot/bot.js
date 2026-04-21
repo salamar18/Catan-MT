@@ -1,5 +1,5 @@
 const { chromium } = require('playwright');
-const startGame = require('./actions/startGame');
+const startGame = require('../dist/actions/startGame');
 
 (async () => {
   const browser = await chromium.connectOverCDP('http://127.0.0.1:9222');
