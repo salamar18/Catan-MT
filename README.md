@@ -11,3 +11,4 @@ Current workflow:
 
 - then split terminal and run node bot/bot.js
 - or PWDEBUG=1 node bot/bot.js for the debugging window
+test change
