@@ -1,5 +1,13 @@
 {
+  "scripts": {
+    "build": "tsc",
+    "bot": "npm run build && node bot/bot.js"
+  },
   "dependencies": {
     "playwright": "^1.58.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.2"
   }
 }
