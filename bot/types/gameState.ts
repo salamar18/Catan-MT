@@ -61,50 +61,64 @@ export type TerrainType = 'wood' | 'brick' | 'sheep' | 'wheat' | 'ore' | 'desert
  * @property {boolean} hasRobber - Robber is on this tile
  */
 export interface HexTile {
-    /** Unique tile id (e.g. index or "x,y") */
     id: string
+    /** Axial hex coordinate — x increases rightward, y increases downward. y=-2 is top row, y=2 is bottom. */
+    x: number
+    y: number
     terrain: TerrainType
     /** Dice number 2-12 (undefined for desert) */
     bips?: number
-    /** Robber is on this tile */
     hasRobber: boolean
 }
 
 /**
- * Board edge (between two vertices); may have a road.
- * @typedef {Object} Edge
- * @property {string} id
- * @property {string | null} roadOwnerId - Player id who built the road, or null
+ * Board edge — one side of a hex; roads are placed here.
+ *
+ * Coordinate encoding: (x, y) is the canonical tile reference (may be a phantom
+ * outside the tile grid for outer-boundary edges). z ∈ {0,1,2} is the edge direction:
+ *   z=0 → south-facing edge  (phantom positions: south boundary of board)
+ *   z=1 → SE-facing edge     (phantom positions: east/SE boundary)
+ *   z=2 → NE-facing edge     (phantom positions: NE boundary)
+ * The three complementary directions (N, NW, SW) are owned by adjacent tiles.
  */
 export interface Edge {
     id: string
-    /** Player id who built the road, or null */
+    x: number
+    y: number
+    z: 0 | 1 | 2
     roadOwnerId: string | null
 }
 
 /**
- * Board vertex (intersection of three hexes); may have settlement or city.
- * @typedef {Object} Vertex
- * @property {string} id
- * @property {string | null} settlementOwnerId - Player id or null
- * @property {'settlement' | 'city' | null} buildingType
+ * Board vertex — intersection of up to three hexes; settlements and cities go here.
+ *
+ * Coordinate encoding: (x, y) is the canonical tile reference (may be a phantom
+ * outside the tile grid for outer-boundary vertices). z ∈ {0,1} is the corner direction:
+ *   z=0 → SW-facing corner   (phantom positions: SW/south boundary of board)
+ *   z=1 → NE-facing corner   (phantom positions: NE/top boundary of board)
+ * The other four corners of each tile are owned by adjacent tiles.
+ *
+ * z semantics confirmed by systematic phantom-boundary analysis across all 54 vertices.
+ * Adjacency math (which vertex IDs border a given tile) is not yet implemented.
  */
 export interface Vertex {
     id: string
-    /** Player id or null */
+    x: number
+    y: number
+    z: 0 | 1
     settlementOwnerId: string | null
     buildingType: 'settlement' | 'city' | null
 }
 
 /**
  * Port for bank trading (2:1 or 3:1).
- * @typedef {Object} Port
- * @property {string} id
- * @property {ResourceType | 'any'} resource - Specific resource for 2:1, or 'any' for 3:1
+ * Uses the same (x, y, z) edge coordinate as the edge it sits on.
  */
 export interface Port {
     id: string
-    /** Specific resource for 2:1, or 'any' for 3:1 */
+    x: number
+    y: number
+    z: 0 | 1 | 2
     resource: ResourceType | 'any'
 }
 

@@ -1,6 +1,18 @@
 const { chromium } = require('playwright');
+const { decode } = require('@msgpack/msgpack');
 const startGame = require('../dist/actions/startGame');
 const readGameState = require('../dist/reader/readGameState');
+const wsGameState = require('../dist/reader/wsGameState');
+
+/** Decode a WebSocket frame payload — MessagePack binary or plain string. */
+function decodeFrame(payload) {
+  if (typeof payload === 'string') return payload;
+  try {
+    return decode(payload);
+  } catch {
+    return payload;
+  }
+}
 
 /** @param {string} url */
 function isBrowserInternalUrl(url) {
@@ -65,10 +77,30 @@ async function resolveColonistGamePage(context, preferredPage) {
   const context = browser.contexts()[0];
   let page = pickColonistPage(context) ?? await context.newPage();
 
+  page.on('websocket', ws => {
+    if (new URL(ws.url()).hostname !== 'socket.svr.colonist.io') return;
+    console.log('[ws] connected:', ws.url());
+    ws.on('framereceived', frame => {
+      const msg = decodeFrame(frame.payload);
+      if (msg?.id === '130') {
+        if (msg.data?.type === 4)  wsGameState.handleFullState(msg.data.payload);
+        if (msg.data?.type === 91) wsGameState.handleDiff(msg.data.payload.diff);
+      }
+      console.log('[ws] <<<', JSON.stringify(msg));
+    });
+    ws.on('framesent', frame => console.log('[ws] >>>', JSON.stringify(decodeFrame(frame.payload))));
+    ws.on('close', () => console.log('[ws] closed'));
+  });
+
   await page.goto('https://colonist.io');
   console.log('[bot] after goto:', page.url());
 
-  await startGame(page);
+  const alreadyInGame = await page.$('#ui-game') !== null;
+  if (!alreadyInGame) {
+    await startGame(page);
+  } else {
+    console.log('[bot] already in a game, skipping startGame');
+  }
 
   page = await resolveColonistGamePage(context, page);
   console.log('[bot] game page (board reads use this tab):', page.url());
