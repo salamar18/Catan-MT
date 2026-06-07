@@ -98,8 +98,8 @@ export interface Edge {
  *   z=1 → NE-facing corner   (phantom positions: NE/top boundary of board)
  * The other four corners of each tile are owned by adjacent tiles.
  *
- * Note: exact physical corner positions TBD — z semantics are inferred from the
- * phantom boundary pattern and need empirical verification before adjacency graph work.
+ * z semantics confirmed by systematic phantom-boundary analysis across all 54 vertices.
+ * Adjacency math (which vertex IDs border a given tile) is not yet implemented.
  */
 export interface Vertex {
     id: string

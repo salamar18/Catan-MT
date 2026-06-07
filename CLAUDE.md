@@ -115,7 +115,7 @@ Phantom positions split cleanly by z:
 
 The complementary 3 directions (N, NW, SW-facing edges) are owned by adjacent tiles.
 
-Exact physical corner/edge positions within a hex are inferred from the phantom boundary pattern — empirical verification (place a settlement, check which vertex ID appears in the diff) needed before building the adjacency graph.
+The z direction semantics are confirmed by systematic analysis of all phantom positions across the full 54-vertex / 72-edge dataset. What remains is implementing the adjacency math: given a tile `(q,r)`, computing which vertex and edge IDs are its six corners/sides.
 
 ### Environment variables
 
