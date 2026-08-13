@@ -278,6 +278,16 @@ export interface Player {
     hasLongestRoad: boolean
     hasLargestArmy: boolean
     hand: Hand
+    /**
+     * Resource hand size from WS `resourceCards.cards.length`
+     * (opponent card values are hidden as 0).
+     */
+    resourceCardCount: number
+    /**
+     * For the local user: same as observed `hand.resources`.
+     * For opponents (1v1): `19 - bank - myHand` per resource (Colonist base supply).
+     */
+    inferredResources: ResourceCounts
 }
 
 /** @typedef {'initial_placement' | 'rolling' | 'playing' | 'discarding' | 'robbing'} GamePhase */
@@ -327,10 +337,18 @@ export interface GameState {
     deck: Deck
     /** Current user's hand (convenience; may also use players[id].hand) */
     myHand: Hand
+    /** Local user's player id (Colonist color id as string) */
+    myPlayerId: string
     /** What current player can build */
     buildable: Buildable
     /** Set when game ends */
     winnerId: string | null
     /** e.g. 15 */
     pointsToWin: number
+    /**
+     * True when 1v1 bank-inference hand sizes line up (self observed sum and
+     * opponent inferred sum match WS card counts, and no negative raw residuals).
+     * False during transient WS splits — still log inferred values, but do not trust them.
+     */
+    resourcesInferenceFresh: boolean
 }

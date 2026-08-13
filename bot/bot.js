@@ -77,14 +77,29 @@ async function resolveColonistGamePage(context, preferredPage) {
   const context = browser.contexts()[0];
   let page = pickColonistPage(context) ?? await context.newPage();
 
+  /** Write logs/game-state.log after each game-state WS update (not heartbeats). */
+  function onGameStateUpdated() {
+    try {
+      readGameState.flushGameStateLog();
+    } catch (e) {
+      console.error('[readGameState] event log failed', e);
+    }
+  }
+
   page.on('websocket', ws => {
     if (new URL(ws.url()).hostname !== 'socket.svr.colonist.io') return;
     console.log('[ws] connected:', ws.url());
     ws.on('framereceived', frame => {
       const msg = decodeFrame(frame.payload);
       if (msg?.id === '130') {
-        if (msg.data?.type === 4)  wsGameState.handleFullState(msg.data.payload);
-        if (msg.data?.type === 91) wsGameState.handleDiff(msg.data.payload.diff);
+        if (msg.data?.type === 4) {
+          wsGameState.handleFullState(msg.data.payload);
+          onGameStateUpdated();
+        }
+        if (msg.data?.type === 91) {
+          wsGameState.handleDiff(msg.data.payload.diff);
+          onGameStateUpdated();
+        }
       }
       console.log('[ws] <<<', JSON.stringify(msg));
     });
@@ -107,16 +122,7 @@ async function resolveColonistGamePage(context, preferredPage) {
 
   const gameState = await readGameState(page);
   console.log('Initial game state scaffold:', JSON.stringify(gameState, null, 2));
-
-  const pollRaw = process.env.GAME_STATE_POLL_MS;
-  const pollMs = pollRaw === undefined || pollRaw === '' ? 2500 : Number(pollRaw);
-  if (Number.isFinite(pollMs) && pollMs > 0) {
-    setInterval(() => {
-      if (page.isClosed()) return;
-      readGameState(page).catch((e) => console.error('[readGameState poll]', e));
-    }, pollMs);
-    console.log(`[bot] GAME_STATE_POLL_MS=${pollMs} → log updates every ${pollMs}ms until you close the browser tab or stop the script`);
-  }
+  console.log('[bot] game-state.log is event-driven (WS type 4 / 91); no poll interval');
 
   await page.pause();
 })();
