@@ -27,6 +27,11 @@ const DEV_CARD: Record<number, keyof DevelopmentCardCounts> = {
     0: 'knight', 1: 'road_building', 2: 'year_of_plenty', 3: 'monopoly', 4: 'victory_point',
 }
 
+/** Colonist base-game supply per resource (1v1 / standard map). */
+export const RESOURCE_BANK_TOTAL = 19
+
+const RESOURCE_TYPES: ResourceType[] = ['wood', 'brick', 'sheep', 'wheat', 'ore']
+
 // ─── Raw state cache ──────────────────────────────────────────────────────────
 
 interface WsRawState {
@@ -37,6 +42,8 @@ interface WsRawState {
 }
 
 let _raw: WsRawState | null = null
+/** Last freshness flag — used to warn only on fresh→stale transitions. */
+let _wasInferenceFresh: boolean | null = null
 
 export function handleFullState(payload: any): void {
     _raw = {
@@ -45,6 +52,7 @@ export function handleFullState(payload: any): void {
         myPlayerColor: payload.playerColor,
         pointsToWin: payload.gameSettings?.victoryPointsToWin ?? 10,
     }
+    _wasInferenceFresh = null
 }
 
 export function handleDiff(diff: any): void {
@@ -111,6 +119,36 @@ function parseHand(ps: any, devPs: any): Hand {
     }
 }
 
+function sumResources(c: ResourceCounts): number {
+    return c.wood + c.brick + c.sheep + c.wheat + c.ore
+}
+
+/**
+ * 1v1 residual: opponent[r] = 19 - bank[r] - myHand[r].
+ * Returns clamped counts plus whether any raw value was negative.
+ */
+function inferOpponentResources(
+    bank: ResourceCounts,
+    myHand: ResourceCounts,
+): { inferred: ResourceCounts; hadNegative: boolean } {
+    const inferred = emptyResourceCounts()
+    let hadNegative = false
+    for (const r of RESOURCE_TYPES) {
+        const raw = RESOURCE_BANK_TOTAL - bank[r] - myHand[r]
+        if (raw < 0) {
+            hadNegative = true
+            console.warn(
+                `[wsGameState] negative residual for ${r}: ` +
+                `${RESOURCE_BANK_TOTAL} - bank=${bank[r]} - me=${myHand[r]} = ${raw}`,
+            )
+            inferred[r] = 0
+        } else {
+            inferred[r] = raw
+        }
+    }
+    return { inferred, hadNegative }
+}
+
 // ─── Main builder ─────────────────────────────────────────────────────────────
 
 function buildGameState(raw: WsRawState): GameState {
@@ -156,25 +194,10 @@ function buildGameState(raw: WsRawState): GameState {
 
     const board: Board = { tiles, edges, vertices, ports, graph: { nodes: {}, adjacency: {} } }
 
-    const players: Player[] = (raw.playerUserStates ?? []).map((u: any) => {
-        const ps = gs.playerStates?.[u.selectedColor] ?? {}
-        const devPs = devState.players?.[u.selectedColor]
-        return {
-            id: String(u.selectedColor),
-            name: u.username,
-            color: COLOR_NAME[u.selectedColor] ?? String(u.selectedColor),
-            victoryPoints: Object.values(ps.victoryPointsState ?? {})
-                .reduce((sum: number, v: any) => sum + Number(v), 0),
-            knightCount: (devPs?.developmentCardsUsed ?? []).filter((c: number) => c === 0).length,
-            hasLongestRoad: !!(gs.mechanicLongestRoadState?.[u.selectedColor]?.hasLongestRoad),
-            hasLargestArmy: !!(gs.mechanicLargestArmyState?.[u.selectedColor]?.hasLargestArmy),
-            hand: parseHand(ps, devPs),
-        }
-    })
-
     const myPs = gs.playerStates?.[raw.myPlayerColor] ?? {}
     const myDevPs = devState.players?.[raw.myPlayerColor]
     const myHand = parseHand(myPs, myDevPs)
+    const myCardCount = (myPs?.resourceCards?.cards ?? []).length
 
     const bankCards = gs.bankState?.resourceCards ?? {}
     const bank: ResourceCounts = {
@@ -184,6 +207,44 @@ function buildGameState(raw: WsRawState): GameState {
         wheat: bankCards['4'] ?? 0,
         ore: bankCards['5'] ?? 0,
     }
+
+    const { inferred: opponentInferred, hadNegative } = inferOpponentResources(bank, myHand.resources)
+
+    const players: Player[] = (raw.playerUserStates ?? []).map((u: any) => {
+        const ps = gs.playerStates?.[u.selectedColor] ?? {}
+        const devPs = devState.players?.[u.selectedColor]
+        const hand = parseHand(ps, devPs)
+        const resourceCardCount = (ps?.resourceCards?.cards ?? []).length
+        const isMe = u.selectedColor === raw.myPlayerColor
+        return {
+            id: String(u.selectedColor),
+            name: u.username,
+            color: COLOR_NAME[u.selectedColor] ?? String(u.selectedColor),
+            victoryPoints: Object.values(ps.victoryPointsState ?? {})
+                .reduce((sum: number, v: any) => sum + Number(v), 0),
+            knightCount: (devPs?.developmentCardsUsed ?? []).filter((c: number) => c === 0).length,
+            hasLongestRoad: !!(gs.mechanicLongestRoadState?.[u.selectedColor]?.hasLongestRoad),
+            hasLargestArmy: !!(gs.mechanicLargestArmyState?.[u.selectedColor]?.hasLargestArmy),
+            hand,
+            resourceCardCount,
+            inferredResources: isMe ? { ...hand.resources } : { ...opponentInferred },
+        }
+    })
+
+    const selfOk = sumResources(myHand.resources) === myCardCount
+    const opponents = players.filter((p) => p.id !== String(raw.myPlayerColor))
+    const opponentsOk = opponents.every(
+        (p) => sumResources(p.inferredResources) === p.resourceCardCount,
+    )
+    const resourcesInferenceFresh = selfOk && opponentsOk && !hadNegative
+
+    if (_wasInferenceFresh === true && !resourcesInferenceFresh) {
+        console.warn(
+            '[wsGameState] resources inference STALE ' +
+            `(selfOk=${selfOk} opponentsOk=${opponentsOk} hadNegative=${hadNegative})`,
+        )
+    }
+    _wasInferenceFresh = resourcesInferenceFresh
 
     const deck: Deck = {
         developmentCards: parseDevCards(devState.bankDevelopmentCards?.cards ?? []),
@@ -213,8 +274,10 @@ function buildGameState(raw: WsRawState): GameState {
         dice,
         deck,
         myHand,
+        myPlayerId: String(raw.myPlayerColor),
         buildable,
         winnerId: null,
         pointsToWin: raw.pointsToWin,
+        resourcesInferenceFresh,
     }
 }

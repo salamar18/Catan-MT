@@ -1,6 +1,6 @@
 import * as fs from 'fs'
 import * as path from 'path'
-import type { DevelopmentCardCounts, GameState, Hand, ResourceCounts } from '../types/gameState'
+import type { DevelopmentCardCounts, GameState, Player, ResourceCounts } from '../types/gameState'
 
 function formatCountsLine(label: string, c: ResourceCounts): string {
     return `${label}: wood=${c.wood} brick=${c.brick} sheep=${c.sheep} wheat=${c.wheat} ore=${c.ore}`
@@ -10,13 +10,15 @@ function formatDevLine(label: string, c: DevelopmentCardCounts): string {
     return `${label}: knight=${c.knight} VP=${c.victory_point} road=${c.road_building} YOP=${c.year_of_plenty} mono=${c.monopoly}`
 }
 
-function formatMyHandLines(hand: Hand): string[] {
+function formatHandDetailLines(p: Player): string[] {
     return [
-        formatCountsLine('resources', hand.resources),
-        formatDevLine('development', hand.developmentCards),
-        `knightsPlayed=${hand.knightsPlayed}  victoryPoints(from cards)=${hand.victoryPoints}`,
+        formatCountsLine('resources', p.inferredResources),
+        formatDevLine('development', p.hand.developmentCards),
+        `VP=${p.victoryPoints}  knights=${p.knightCount}  longestRoad=${p.hasLongestRoad}  largestArmy=${p.hasLargestArmy}`,
+        `handSize=${p.resourceCardCount}`,
     ]
 }
+
 
 export type GameStateLogOptions = {
     /** Shown under the header (e.g. board read timeout / wrong tab). */
@@ -24,7 +26,7 @@ export type GameStateLogOptions = {
 }
 
 /**
- * Renders {@link GameState} as plain text: board first, then turn/meta, players, bank, your hand, buildable.
+ * Renders {@link GameState} as plain text: board, turn/meta, my hand, opponent hand, bank, buildable.
  */
 export function formatGameStateLog(state: GameState, options: GameStateLogOptions = {}): string {
     const lines: string[] = []
@@ -64,24 +66,34 @@ export function formatGameStateLog(state: GameState, options: GameStateLogOption
     lines.push(`  dice: ${state.dice.first}+${state.dice.second}  rolled=${state.dice.rolled}`)
     lines.push('')
 
-    lines.push('PLAYERS')
+    const me = state.players.find((p) => p.id === state.myPlayerId)
+    const opponents = state.players.filter((p) => p.id !== state.myPlayerId)
+
+    lines.push(me ? `MY HAND — ${me.name}` : 'MY HAND')
     lines.push('-'.repeat(40))
-    if (state.players.length === 0) {
-        lines.push('  (none parsed yet)')
+    if (!me) {
+        lines.push('  (local player not found)')
     } else {
-        for (const p of state.players) {
-            lines.push(`  [${p.color}] ${p.name}  id=${p.id}`)
-            lines.push(`    VP=${p.victoryPoints}  knights=${p.knightCount}  longestRoad=${p.hasLongestRoad}  largestArmy=${p.hasLargestArmy}`)
-            lines.push(`    ${formatCountsLine('resources', p.hand.resources)}`)
-            lines.push(`    ${formatDevLine('development', p.hand.developmentCards)}`)
-            lines.push('')
+        for (const line of formatHandDetailLines(me)) {
+            lines.push(`  ${line}`)
         }
     }
+    lines.push('')
 
-    lines.push('MY HAND (local user)')
-    lines.push('-'.repeat(40))
-    for (const line of formatMyHandLines(state.myHand)) {
-        lines.push(`  ${line}`)
+    if (opponents.length === 0) {
+        lines.push('OPPONENT HAND')
+        lines.push('-'.repeat(40))
+        lines.push('  (none)')
+    } else {
+        for (let i = 0; i < opponents.length; i++) {
+            if (i > 0) lines.push('')
+            const opp = opponents[i]
+            lines.push(`OPPONENT HAND — ${opp.name}`)
+            lines.push('-'.repeat(40))
+            for (const line of formatHandDetailLines(opp)) {
+                lines.push(`  ${line}`)
+            }
+        }
     }
 
     lines.push('')
